@@ -8,7 +8,7 @@ override CPPFLAGS += $(JCPPFLAGS)
 
 SRCS = \
 	jltypes gf ast builtins module codegen interpreter \
-	alloc dlload sys init task array dump toplevel jl_uv jlapi profile llvm-simdloop
+	alloc dlload sys init task array dump toplevel jl_uv jlapi profile llvm-simdloop llvm-opencl-julia-metadata llvm-opencl-julia-arraytopointer llvm-opencl-julia-arguments
 
 FLAGS = \
 	-D_GNU_SOURCE -Iflisp -Isupport \

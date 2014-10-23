@@ -155,8 +155,18 @@ function _dump_function(f, t::ANY, native, wrapper)
     str
 end
 
+function _dump_function_module(f, t::ANY)
+    str = ccall(:jl_dump_function_module, Any, (Any,Any), f, t)::ByteString
+    if str == ""
+        error("no method found for the specified argument types")
+    end
+    str
+end
+
+
 code_llvm  (f::Callable, types::(Type...)) = print(_dump_function(f, types, false, false))
 code_native(f::Callable, types::(Type...)) = print(_dump_function(f, types, true, false))
+code_llvm_module  (f::Callable, types::(Type...)) = print(_dump_function_module(f, types))
 
 function functionlocs(f::Callable, types=(Type...))
     locs = Any[]

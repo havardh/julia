@@ -250,6 +250,9 @@ static MDNode* tbaa_const;          // Memory that is immutable by the time LLVM
 namespace llvm {
     extern Pass *createLowerSimdLoopPass();
     extern bool annotateSimdLoop( BasicBlock* latch );
+    extern Pass* createRemoveJuliaMetadataPass();
+    extern Pass* createArrayToPointerPass();
+    extern Pass* createOpenCLArgumentPass();
 }
 
 // constants
@@ -4754,3 +4757,36 @@ MCLineEntryCollection::iterator it = lec->begin();
 addr = (*it).getLabel()->getVariableValue()
 line = (*it).getLine()
 */
+
+extern "C" DLLEXPORT
+const jl_value_t *jl_dump_function_module(jl_function_t *f, jl_tuple_t *types)
+{
+    std::string code;
+    llvm::raw_string_ostream stream(code);
+    llvm::formatted_raw_ostream fstream(stream);
+
+    llvm::Function *llvmf = (llvm::Function*)jl_get_llvmf(f, types, false);
+
+    llvm::LLVMContext context;
+    llvm::Module module(StringRef("OpenCL Module"), context);
+    module.setDataLayout(StringRef("e-m:o-i64:64-f80:128-n8:16:32:64-S128"));
+    module.setTargetTriple(StringRef("x86_64-apple-macosx10.9.0"));
+
+    module.getFunctionList().push_back(llvmf);
+
+    llvm::PassManager modulePassManager;
+    modulePassManager.add(createOpenCLArgumentPass());
+    modulePassManager.run(module);
+
+    llvm::FunctionPassManager pm(&module);
+    pm.add(createArrayToPointerPass());
+    pm.add(createRemoveJuliaMetadataPass());
+
+    for (Module::iterator I = module.begin(), E = module.end(); I != E; ++I) {
+      pm.run(*I);
+    }
+
+    module.print(stream, NULL);
+
+    return jl_cstr_to_string(const_cast<char*>(stream.str().c_str()));
+}
