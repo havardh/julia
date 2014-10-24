@@ -787,6 +787,9 @@ export
     ∩,
     ∪,
 
+# opencl    
+    get_global_id,
+
 # strings and text output
     ascii,
     base,

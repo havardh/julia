@@ -253,6 +253,8 @@ namespace llvm {
     extern Pass* createRemoveJuliaMetadataPass();
     extern Pass* createArrayToPointerPass();
     extern Pass* createOpenCLArgumentPass();
+    extern Pass* createLowerJuliaArrayPass();
+    extern Pass* createFunctionInliningPass();
 }
 
 // constants
@@ -4758,6 +4760,9 @@ addr = (*it).getLabel()->getVariableValue()
 line = (*it).getLine()
 */
 
+#include "llvm/IR/InstIterator.h"
+
+
 extern "C" DLLEXPORT
 const jl_value_t *jl_dump_function_module(jl_function_t *f, jl_tuple_t *types)
 {
@@ -4767,19 +4772,44 @@ const jl_value_t *jl_dump_function_module(jl_function_t *f, jl_tuple_t *types)
 
     llvm::Function *llvmf = (llvm::Function*)jl_get_llvmf(f, types, false);
 
+    //jl_Module->dump();
+    //exit(0);
+
+    
     llvm::LLVMContext context;
     llvm::Module module(StringRef("OpenCL Module"), context);
     module.setDataLayout(StringRef("e-m:o-i64:64-f80:128-n8:16:32:64-S128"));
     module.setTargetTriple(StringRef("x86_64-apple-macosx10.9.0"));
 
     module.getFunctionList().push_back(llvmf);
+    /*
+    for (inst_iterator I = inst_begin(llvmf), E = inst_end(llvmf); I != E; ++I) {
+      
+      if (CallInst* call = dyn_cast<CallInst>(&*I)) {
 
+        StringRef name = call->getCalledFunction()->getName();
+        
+        if (!module.getFunction(name)) {
+
+          //call->getCalledFunction()->getParent()->dump();
+          
+          //module.getFunctionList().push_back(jl_Module->getFunction(name));
+        }
+      }
+    }
+
+    module.dump();
+    */
     llvm::PassManager modulePassManager;
-    modulePassManager.add(createOpenCLArgumentPass());
+    //modulePassManager.add(createOpenCLArgumentPass());
+    modulePassManager.add(createLowerJuliaArrayPass());
+    modulePassManager.add(createFunctionInliningPass());
     modulePassManager.run(module);
-
+    
     llvm::FunctionPassManager pm(&module);
-    pm.add(createArrayToPointerPass());
+    
+    
+    //pm.add(createArrayToPointerPass());
     pm.add(createRemoveJuliaMetadataPass());
 
     for (Module::iterator I = module.begin(), E = module.end(); I != E; ++I) {

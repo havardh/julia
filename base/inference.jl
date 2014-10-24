@@ -2019,6 +2019,11 @@ function inlineable(f, e::Expr, atypes, sv, enclosing_ast)
     if !(isa(f,Function) || isstructtype(f) || isa(f,IntrinsicFunction))
         return NF
     end
+
+    if (f == getindex || f == setindex! || f == get_global_id)
+        return NF
+    end
+
     argexprs = e.args[2:end]
 
     if is(f, convert_default) && length(atypes)==3

@@ -1455,3 +1455,6 @@ for (f, op) = ((:cummin, :min), (:cummax, :max))
 
     @eval ($f)(A::AbstractArray) = ($f)(A, 1)
 end
+
+# OpenCL prototypes
+get_global_id(i) = i

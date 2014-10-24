@@ -17,7 +17,7 @@ struct RemoveJuliaMetadataPass : public FunctionPass {
 
 	virtual bool runOnFunction(Function &F) {
 
-	 	F.setName(Twine("at"));
+	 	//F.setName(Twine("at"));
 
 		for (ilist_iterator<BasicBlock> bb = F.getBasicBlockList().begin();
 			bb != F.getBasicBlockList().end(); ++bb)
