@@ -4778,8 +4778,8 @@ const jl_value_t *jl_dump_function_module(jl_function_t *f, jl_tuple_t *types)
     
     llvm::LLVMContext context;
     llvm::Module module(StringRef("OpenCL Module"), context);
-    module.setDataLayout(StringRef("e-m:o-i64:64-f80:128-n8:16:32:64-S128"));
-    module.setTargetTriple(StringRef("x86_64-apple-macosx10.9.0"));
+    module.setDataLayout(StringRef("e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:128:128-v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:1024"));
+    module.setTargetTriple(StringRef("nvptx64-nvidia-cuda"));
 
     module.getFunctionList().push_back(llvmf);
     /*
@@ -4804,17 +4804,21 @@ const jl_value_t *jl_dump_function_module(jl_function_t *f, jl_tuple_t *types)
     //modulePassManager.add(createOpenCLArgumentPass());
     modulePassManager.add(createLowerJuliaArrayPass());
     modulePassManager.add(createFunctionInliningPass());
+    modulePassManager.add(createRemoveJuliaMetadataPass());
     modulePassManager.run(module);
+
+    module.getFunction("getindex")->eraseFromParent();
+    module.getFunction("setindex")->eraseFromParent();
     
-    llvm::FunctionPassManager pm(&module);
+    //llvm::FunctionPassManager pm(&module);
     
     
     //pm.add(createArrayToPointerPass());
-    pm.add(createRemoveJuliaMetadataPass());
+    
 
-    for (Module::iterator I = module.begin(), E = module.end(); I != E; ++I) {
-      pm.run(*I);
-    }
+    //for (Module::iterator I = module.begin(), E = module.end(); I != E; ++I) {
+    //  pm.run(*I);
+    //}
 
     module.print(stream, NULL);
 

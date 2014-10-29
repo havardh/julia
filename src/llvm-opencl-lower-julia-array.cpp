@@ -55,40 +55,77 @@ struct LowerJuliaArrayPass : public ModulePass {
   LowerJuliaArrayPass() : ModulePass(ID) {}
 
   virtual bool runOnModule(Module &M) {
-
-    linkLibrary(M);
-
+    
     FunctionPassManager fpm(&M);
     fpm.add(createLowerJuliaArrayFunctionPass());
     
-
     std::vector<Function*> Fs = functions(M);
+    
+    linkLibrary(M);
 
     for (std::vector<Function*>::iterator I = Fs.begin(), E = Fs.end(); I != E; ++I) {
 
            
       Function *OldFunc = (*I);
 
-      if (OldFunc->getName().substr(0,6) == "julia_") {      
-        Function *NewFunc = copyFunctionWithLoweredJuliaArrayArguments(OldFunc);
+      Function *NewFunc = copyFunctionWithLoweredJuliaArrayArguments(OldFunc);
         
-        OldFunc->eraseFromParent();
-        M.getFunctionList().push_back(NewFunc);
-        
-        fpm.run(*NewFunc);
-      }
+      OldFunc->eraseFromParent();
+      M.getFunctionList().push_back(NewFunc);
+      
+      generateFunctionMetadata(M, NewFunc);
+    
+      fpm.run(*NewFunc);
     }
     return false;
   }
 
   std::vector<Function*> functions(Module &M) {
     std::vector<Function*> functions;
-    
+
     for (Module::iterator F = M.begin(); F != M.end(); ++F) {
+
+      F->setName(unmangleName(F->getName()));
       functions.push_back(F);
     }
-
+    
     return functions;
+  }
+
+  void generateFunctionMetadata(Module &M, Function *F) {
+
+    generateOpenCLKernelMetadata(M, F);
+    generateNVVMKernelMetadata(M, F);
+    
+    
+  }
+
+  void generateOpenCLKernelMetadata(Module &M, Function *F) {
+
+    SmallVector <llvm::Value*, 5> kernelMDArgs;
+    kernelMDArgs.push_back(F);
+
+    MDNode *kernelMDNode = MDNode::get(M.getContext(), kernelMDArgs);
+    
+    NamedMDNode* OpenCLKernels = M.getOrInsertNamedMetadata("opencl.kernels");
+    OpenCLKernels->addOperand(kernelMDNode);
+  }
+
+  void generateNVVMKernelMetadata(Module &M, Function *F) {
+
+    LLVMContext &Ctx = M.getContext();
+    
+    SmallVector <llvm::Value*, 5> kernelMDArgs;
+    kernelMDArgs.push_back(F);
+    kernelMDArgs.push_back(MDString::get(Ctx, "kernel"));
+    kernelMDArgs.push_back(ConstantInt::get(llvm::Type::getInt32Ty(Ctx), 1));
+
+    MDNode *kernelMDNode = MDNode::get(Ctx, kernelMDArgs);
+
+    NamedMDNode* NvvmAnnotations = M.getOrInsertNamedMetadata("nvvm.annotations");
+    NvvmAnnotations->addOperand(kernelMDNode);
+
+  
   }
 
   void linkLibrary(Module &M) {
@@ -96,6 +133,11 @@ struct LowerJuliaArrayPass : public ModulePass {
     SMDiagnostic error;
     Library = ParseIRFile("lowered-julia-array.bc", error, M.getContext());
 
+    SmallVector<Type*, 1> args;
+    args.push_back(Type::getInt32Ty(Library->getContext()));
+    FunctionType *ft = FunctionType::get(Type::getInt64Ty(Library->getContext()), args, false);
+    Library->getOrInsertFunction("get_global_id", ft);
+    
     Linker::LinkModules(&M, Library, 0, 0);
   }
 
@@ -135,8 +177,8 @@ struct LowerJuliaArrayPass : public ModulePass {
 
       if (is_jl_array_type(argType)) {
         // Should figure out actual type from meta?
-        // This is hard coded i64*
-        ArgTypes.push_back(PointerType::get(IntegerType::get(OldFunc->getContext(), 64), 0));
+        // This is hardcoded i64*
+        ArgTypes.push_back(PointerType::get(IntegerType::get(OldFunc->getContext(), 64), 1));
       } else {
         ArgTypes.push_back(I->getType());
       }
@@ -149,7 +191,7 @@ struct LowerJuliaArrayPass : public ModulePass {
 
   FunctionType* buildLoweredFunctionType(Function *F, std::vector<Type*> ArgTypes) {
     return FunctionType::get(
-      F->getFunctionType()->getReturnType(),
+      Type::getVoidTy(F->getContext()),
       ArgTypes,
       F->getFunctionType()->isVarArg()
     );
@@ -172,8 +214,6 @@ struct LowerJuliaArrayFunctionPass : public FunctionPass {
   LowerJuliaArrayFunctionPass() : FunctionPass(ID) {}
 
   virtual bool runOnFunction(Function &F) {
-
-    F.setName(unmangleName(F.getName()));
     
     std::vector<Instruction*> Is;
     for (inst_iterator I = inst_begin(F), E = inst_end(F); I != E; ++I) {
@@ -207,9 +247,11 @@ struct LowerJuliaArrayFunctionPass : public FunctionPass {
         } else {
           errs() << "Did not find function: " << name << "\n";
         }
-      }
+      } else if (ReturnInst* ret = dyn_cast<ReturnInst>(*I)) {
 
-      //F.dump();
+        ReplaceInstWithInst(ret, ReturnInst::Create(F.getContext()));
+        
+      }
     }
       
         
