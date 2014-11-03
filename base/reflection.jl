@@ -166,7 +166,7 @@ end
 
 code_llvm  (f::Callable, types::(Type...)) = print(_dump_function(f, types, false, false))
 code_native(f::Callable, types::(Type...)) = print(_dump_function(f, types, true, false))
-code_llvm_module  (f::Callable, types::(Type...)) = print(_dump_function_module(f, types))
+code_llvm_module  (f::Callable, types::(Type...)) = _dump_function_module(f, types)
 
 function functionlocs(f::Callable, types=(Type...))
     locs = Any[]
