@@ -4760,7 +4760,29 @@ addr = (*it).getLabel()->getVariableValue()
 line = (*it).getLine()
 */
 
+void cloneFunctionIntoModule(Module &M, Function *OldFunc)
+{
+    Function* NewFunc = Function::Create(
+        OldFunc->getFunctionType(),
+        OldFunc->getLinkage(),
+        OldFunc->getName(),
+        &M
+    );
 
+    ValueToValueMapTy VMap;
+    Function::arg_iterator DestI = NewFunc->arg_begin();
+    for (Function::const_arg_iterator I = OldFunc->arg_begin(), E = OldFunc->arg_end(); I != E; ++I) {
+        VMap[I] = DestI++;
+    }
+
+
+    SmallVector<ReturnInst*, 5> Returns;
+    
+    CloneFunctionInto(NewFunc, OldFunc, VMap, false, Returns, "", 0);
+  
+}
+
+#include <iostream>
 extern "C" DLLEXPORT
 const jl_value_t *jl_dump_function_module(jl_function_t *f, jl_tuple_t *types)
 {
@@ -4769,15 +4791,14 @@ const jl_value_t *jl_dump_function_module(jl_function_t *f, jl_tuple_t *types)
     llvm::formatted_raw_ostream fstream(stream);
 
     llvm::Function *llvmf = (llvm::Function*)jl_get_llvmf(f, types, false);
-
+    std::cout << "llvmf: " << Type::getInt64Ty(llvmf->getParent()->getContext()) << "\n";
     
-    llvm::LLVMContext context;
-    llvm::Module module(StringRef("OpenCL Module"), context);
+    llvm::Module module(StringRef("OpenCL Module"), jl_Module->getContext());
     module.setDataLayout(StringRef("e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:128:128-v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:1024"));
     module.setTargetTriple(StringRef("nvptx64-nvidia-cuda"));
 
-    module.getFunctionList().push_back(llvmf);
-
+    cloneFunctionIntoModule(module, llvmf);
+    
     llvm::PassManager modulePassManager;
     modulePassManager.add(createLowerJuliaArrayPass());
     modulePassManager.add(createFunctionInliningPass());

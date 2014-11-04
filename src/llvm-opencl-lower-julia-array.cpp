@@ -15,6 +15,7 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/Regex.h"
 #include "llvm/Linker.h"
+#include "llvm/IR/Constants.h"
 
 namespace llvm {
 
@@ -64,14 +65,13 @@ struct LowerJuliaArrayPass : public ModulePass {
     linkLibrary(M);
 
     for (std::vector<Function*>::iterator I = Fs.begin(), E = Fs.end(); I != E; ++I) {
-
-           
+      
+      
       Function *OldFunc = (*I);
 
-      Function *NewFunc = copyFunctionWithLoweredJuliaArrayArguments(OldFunc);
+      Function *NewFunc = copyFunctionWithLoweredJuliaArrayArguments(M, OldFunc);
         
       OldFunc->eraseFromParent();
-      M.getFunctionList().push_back(NewFunc);
       
       generateFunctionMetadata(M, NewFunc);
     
@@ -134,14 +134,17 @@ struct LowerJuliaArrayPass : public ModulePass {
     Library = ParseIRFile("lowered-julia-array.bc", error, M.getContext());
 
     SmallVector<Type*, 1> args;
-    args.push_back(Type::getInt32Ty(Library->getContext()));
-    FunctionType *ft = FunctionType::get(Type::getInt64Ty(Library->getContext()), args, false);
-    Library->getOrInsertFunction("get_global_id", ft);
+    args.push_back(Type::getInt64Ty(Library->getContext()));
+
+    Library->getOrInsertFunction(
+      "get_global_id",
+      FunctionType::get(Type::getInt64Ty(Library->getContext()), args, false)
+    );
     
     Linker::LinkModules(&M, Library, 0, 0);
   }
 
-  Function* copyFunctionWithLoweredJuliaArrayArguments(Function *OldFunc) {
+  Function* copyFunctionWithLoweredJuliaArrayArguments(Module &M, Function *OldFunc) {
 
     std::vector<Type*> ArgTypes = lowerJuliaArrayArguments(OldFunc);
 
@@ -150,7 +153,8 @@ struct LowerJuliaArrayPass : public ModulePass {
     Function* NewFunc = Function::Create(
       functionType,
       OldFunc->getLinkage(),
-      OldFunc->getName()
+      OldFunc->getName(),
+      &M
     );
 
     ValueToValueMapTy VMap;
@@ -207,7 +211,6 @@ Pass* createLowerJuliaArrayPass() {
   return new LowerJuliaArrayPass();
 }
 
-
 struct LowerJuliaArrayFunctionPass : public FunctionPass {
   
   static char ID;
@@ -223,26 +226,34 @@ struct LowerJuliaArrayFunctionPass : public FunctionPass {
     for (std::vector<Instruction*>::iterator I = Is.begin(), E = Is.end(); I != E; ++I) {
 
       if (CallInst* call = dyn_cast<CallInst>(*I)) {
-
-        //errs() << *call << "\n"; 
         
         StringRef name = unmangleName(call->getCalledFunction()->getName());
-        //errs() << name << "\n";
         Function *function = F.getParent()->getFunction(name);
-
+        
 
         if (function) {
-          //errs() << function->getName() << "\n";
 
           std::vector<Value*> args;
           for(int i=0; i<call->getNumArgOperands(); i++) {
             args.push_back(call->getArgOperand(i));
           }
-          
+
           ArrayRef<Value*> Args(args);
+                   
           CallInst *newCall = CallInst::Create(function, Args);
 
-          ReplaceInstWithInst(call, newCall);
+          if (newCall->getType() != call->getType()) {
+            if (call->use_begin() != call->use_end()) {
+              errs() << "Cannot handle usage of non matching return types for " << *call->getType() << " and " << *newCall->getType() << "\n";
+            }
+            
+            newCall->insertBefore(call);
+            call->eraseFromParent();
+            
+          } else {
+            ReplaceInstWithInst(call, newCall);
+          }
+
             
         } else {
           errs() << "Did not find function: " << name << "\n";
