@@ -4791,7 +4791,6 @@ const jl_value_t *jl_dump_function_module(jl_function_t *f, jl_tuple_t *types)
     llvm::formatted_raw_ostream fstream(stream);
 
     llvm::Function *llvmf = (llvm::Function*)jl_get_llvmf(f, types, false);
-    std::cout << "llvmf: " << Type::getInt64Ty(llvmf->getParent()->getContext()) << "\n";
     
     llvm::Module module(StringRef("OpenCL Module"), jl_Module->getContext());
     module.setDataLayout(StringRef("e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:128:128-v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:1024"));
