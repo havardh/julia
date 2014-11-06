@@ -1393,4 +1393,5 @@ export
     @simd,
     @label,
     @goto,
-    @inline
+    @inline,
+    @noinline
